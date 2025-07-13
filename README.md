@@ -1,16 +1,16 @@
-# Welcome to your Lovable project
+# Welcome to your verse finder project
 
 ## Project info
 
-**URL**: https://lovable.dev/projects/7979016b-2d9e-4a4a-b549-b02a9aa44d3d
+**URL**: https://github.com/kiganyamburu/verse-whisper-finder.git
 
 ## How can I edit this code?
 
 There are several ways of editing your application.
 
-**Use Lovable**
+**Git clone**
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/7979016b-2d9e-4a4a-b549-b02a9aa44d3d) and start prompting.
+Simply visit the project(https://github.com/kiganyamburu/verse-whisper-finder.git) and start prompting.
 
 Changes made via Lovable will be committed automatically to this repo.
 
