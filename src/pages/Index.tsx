@@ -94,7 +94,7 @@ const Index = () => {
             Discover the Word through voice recognition
           </p>
           <p className="text-sm text-muted-foreground">
-            © 2024 VerseFinder. Built with faith and technology.
+            © 2025 VerseFinder. Built with faith and technology.
           </p>
         </div>
       </footer>
