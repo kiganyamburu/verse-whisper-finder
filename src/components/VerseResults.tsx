@@ -1,3 +1,5 @@
+'use client';
+
 import { useState } from 'react';
 import { Copy, Share2, Heart, BookOpen, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';

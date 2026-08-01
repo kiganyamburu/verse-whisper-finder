@@ -8,7 +8,7 @@ const HeroSection = () => {
       {/* Hero Image Background */}
       <div className="absolute inset-0 z-0">
         <img 
-          src={heroImage} 
+          src={heroImage.src} 
           alt="Spiritual Bible with light and sound waves"
           className="w-full h-full object-cover opacity-20"
         />

@@ -1,19 +1,123 @@
-import { useState } from 'react';
-import { Mic, Square, Upload, Volume2 } from 'lucide-react';
+'use client';
+
+import { useState, useRef, useEffect } from 'react';
+import { Mic, Square, Upload, Volume2, Pause } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { useToast } from '@/hooks/use-toast';
 
-const AudioRecorder = () => {
+interface AudioRecorderProps {
+  onRecordingComplete?: (url: string) => void;
+}
+
+const AudioRecorder = ({ onRecordingComplete }: AudioRecorderProps) => {
   const [isRecording, setIsRecording] = useState(false);
   const [hasRecording, setHasRecording] = useState(false);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  
+  const { toast } = useToast();
+
+  useEffect(() => {
+    if (audioUrl) {
+      const audio = new Audio(audioUrl);
+      audio.onended = () => setIsPlaying(false);
+      audioRef.current = audio;
+    }
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
+    };
+  }, [audioUrl]);
+
+  const startRecording = async () => {
+    try {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        setIsPlaying(false);
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
+      audioChunksRef.current = [];
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.onstop = () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
+        const url = URL.createObjectURL(audioBlob);
+        setAudioUrl(url);
+        setHasRecording(true);
+        stream.getTracks().forEach((track) => track.stop());
+        if (onRecordingComplete) {
+          onRecordingComplete(url);
+        }
+      };
+
+      recorder.start();
+      setIsRecording(true);
+      setHasRecording(false);
+      setAudioUrl(null);
+    } catch (err) {
+      console.error("Error accessing microphone:", err);
+      toast({
+        title: "Microphone Access Error",
+        description: "Please allow microphone access to record audio.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
+  };
 
   const toggleRecording = () => {
     if (isRecording) {
-      setIsRecording(false);
-      setHasRecording(true);
+      stopRecording();
     } else {
-      setIsRecording(true);
-      setHasRecording(false);
+      startRecording();
+    }
+  };
+
+  const togglePlayback = () => {
+    if (!audioRef.current) return;
+    
+    if (isPlaying) {
+      audioRef.current.pause();
+      setIsPlaying(false);
+    } else {
+      audioRef.current.play();
+      setIsPlaying(true);
+    }
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        setIsPlaying(false);
+      }
+      const url = URL.createObjectURL(file);
+      setAudioUrl(url);
+      setHasRecording(true);
+      if (onRecordingComplete) {
+        onRecordingComplete(url);
+      }
     }
   };
 
@@ -62,20 +166,32 @@ const AudioRecorder = () => {
           </Button>
           
           <p className="text-sm text-muted-foreground">
-            {isRecording ? 'Recording... Tap to stop' : 'Tap and hold to record'}
+            {isRecording ? 'Recording... Tap to stop' : 'Tap to record'}
           </p>
         </div>
 
-        {/* Upload Option */}
+        {/* Upload & Playback Option */}
         <div className="mt-6 pt-6 border-t border-border">
           <div className="flex items-center justify-center gap-4">
-            <Button variant="outline" className="flex-1">
-              <Upload className="h-4 w-4 mr-2" />
-              Upload Audio
-            </Button>
+            <label className="flex-1 cursor-pointer">
+              <div className="flex items-center justify-center border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 rounded-md text-sm font-medium transition-colors">
+                <Upload className="h-4 w-4 mr-2" />
+                Upload Audio
+              </div>
+              <input
+                type="file"
+                accept="audio/*"
+                className="hidden"
+                onChange={handleFileUpload}
+              />
+            </label>
             {hasRecording && (
-              <Button variant="outline" size="icon">
-                <Volume2 className="h-4 w-4" />
+              <Button variant="outline" size="icon" onClick={togglePlayback} className="w-10 h-10">
+                {isPlaying ? (
+                  <Pause className="h-4 w-4 text-primary" />
+                ) : (
+                  <Volume2 className="h-4 w-4 text-primary" />
+                )}
               </Button>
             )}
           </div>
