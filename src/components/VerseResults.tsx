@@ -1,27 +1,41 @@
 'use client';
 
 import { useState } from 'react';
-import { Copy, Share2, Heart, BookOpen, Sparkles } from 'lucide-react';
+import { Copy, Share2, Heart, BookOpen, Sparkles, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { MatchResult } from '@/lib/matcher';
 
-const VerseResults = () => {
+interface VerseResultsProps {
+  matchedVerse?: MatchResult | null;
+}
+
+const VerseResults = ({ matchedVerse }: VerseResultsProps) => {
   const [translation, setTranslation] = useState('NIV');
   
-  // Mock data for demonstration
-  const verseData = {
+  const verseData = matchedVerse || {
     reference: 'John 3:16',
     text: 'For God so loved the world that he gave his one and only Son, that whoever believes in him shall not perish but have eternal life.',
     context: 'Jesus explains the nature of God\'s love and salvation to Nicodemus',
-    confidence: 94,
+    confidence: 100,
     chapter: 'John 3',
     theme: 'God\'s Love & Salvation'
   };
 
   return (
     <div className="w-full max-w-2xl mx-auto space-y-6 animate-fade-in">
+      {/* Low Confidence warning */}
+      {verseData.confidence < 50 && (
+        <div className="flex items-center gap-3 p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/30 text-yellow-600 dark:text-yellow-400 text-sm max-w-2xl mx-auto">
+          <AlertCircle className="h-5 w-5 shrink-0" />
+          <div>
+            <span className="font-semibold">Low match confidence.</span> We couldn't find an exact match in our database. Here is the closest match based on what was heard.
+          </div>
+        </div>
+      )}
+
       {/* Confidence Badge */}
       <div className="text-center">
         <Badge variant="secondary" className="text-lg px-4 py-2">

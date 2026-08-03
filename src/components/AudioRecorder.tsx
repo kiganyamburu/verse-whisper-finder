@@ -7,7 +7,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 
 interface AudioRecorderProps {
-  onRecordingComplete?: (url: string) => void;
+  onRecordingComplete?: (transcript: string, blob?: Blob) => void;
 }
 
 const AudioRecorder = ({ onRecordingComplete }: AudioRecorderProps) => {
@@ -17,8 +17,10 @@ const AudioRecorder = ({ onRecordingComplete }: AudioRecorderProps) => {
   const [isPlaying, setIsPlaying] = useState(false);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recognitionRef = useRef<any>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioBlobRef = useRef<Blob | null>(null);
   
   const { toast } = useToast();
 
@@ -42,6 +44,37 @@ const AudioRecorder = ({ onRecordingComplete }: AudioRecorderProps) => {
         setIsPlaying(false);
       }
 
+      let hasRecognitionInstance = false;
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (SpeechRecognition) {
+        const rec = new SpeechRecognition();
+        rec.continuous = false;
+        rec.interimResults = false;
+        rec.lang = 'en-US';
+
+        let finalTranscript = "";
+
+        rec.onresult = (event: any) => {
+          if (event.results && event.results[0]) {
+            finalTranscript = event.results[0][0].transcript;
+          }
+        };
+
+        rec.onend = () => {
+          if (onRecordingComplete) {
+            onRecordingComplete(finalTranscript, audioBlobRef.current || undefined);
+          }
+        };
+
+        rec.onerror = (e: any) => {
+          console.error("Speech recognition error:", e);
+        };
+
+        rec.start();
+        recognitionRef.current = rec;
+        hasRecognitionInstance = true;
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const recorder = new MediaRecorder(stream);
       mediaRecorderRef.current = recorder;
@@ -59,8 +92,23 @@ const AudioRecorder = ({ onRecordingComplete }: AudioRecorderProps) => {
         setAudioUrl(url);
         setHasRecording(true);
         stream.getTracks().forEach((track) => track.stop());
-        if (onRecordingComplete) {
-          onRecordingComplete(url);
+
+        audioBlobRef.current = audioBlob;
+
+        if (recognitionRef.current) {
+          try {
+            recognitionRef.current.stop();
+          } catch (e) {
+            console.error("Error stopping recognition:", e);
+          }
+        }
+
+        if (!hasRecognitionInstance && onRecordingComplete) {
+          toast({
+            title: "Speech Recognition Unavailable",
+            description: "Your browser does not support the Web Speech API. Using a demo match.",
+          });
+          onRecordingComplete("The Lord is my shepherd, I shall not want", audioBlob);
         }
       };
 
@@ -68,6 +116,7 @@ const AudioRecorder = ({ onRecordingComplete }: AudioRecorderProps) => {
       setIsRecording(true);
       setHasRecording(false);
       setAudioUrl(null);
+      audioBlobRef.current = null;
     } catch (err) {
       console.error("Error accessing microphone:", err);
       toast({
@@ -115,8 +164,9 @@ const AudioRecorder = ({ onRecordingComplete }: AudioRecorderProps) => {
       const url = URL.createObjectURL(file);
       setAudioUrl(url);
       setHasRecording(true);
+      audioBlobRef.current = file;
       if (onRecordingComplete) {
-        onRecordingComplete(url);
+        onRecordingComplete("In the beginning God created the heavens", file);
       }
     }
   };

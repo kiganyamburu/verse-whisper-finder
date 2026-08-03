@@ -5,20 +5,45 @@ import Header from '@/components/Header';
 import HeroSection from '@/components/HeroSection';
 import AudioRecorder from '@/components/AudioRecorder';
 import VerseResults from '@/components/VerseResults';
+import { matchVerse, MatchResult } from '@/lib/matcher';
 
 export default function Home() {
   const [showResults, setShowResults] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [matchedVerse, setMatchedVerse] = useState<MatchResult | null>(null);
 
-  const handleRecordingComplete = () => {
+  const handleRecordingComplete = async (transcript: string, blob?: Blob) => {
     setIsAnalyzing(true);
     setShowResults(false);
     
-    // Simulate database lookup latency
-    setTimeout(() => {
+    try {
+      const formData = new FormData();
+      formData.append("transcript", transcript);
+      if (blob) {
+        formData.append("audio", blob, "recording.wav");
+      }
+
+      const response = await fetch("/api/match", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setMatchedVerse(data.match);
+      } else {
+        console.warn("API response failed, falling back to local matching");
+        const match = matchVerse(transcript);
+        setMatchedVerse(match);
+      }
+    } catch (err) {
+      console.error("Failed to connect to API, falling back to local matching:", err);
+      const match = matchVerse(transcript);
+      setMatchedVerse(match);
+    } finally {
       setIsAnalyzing(false);
       setShowResults(true);
-    }, 2000);
+    }
   };
 
   return (
@@ -47,6 +72,10 @@ export default function Home() {
             <div className="text-center">
               <button
                 onClick={() => {
+                  if (!showResults) {
+                    const fallback = matchVerse("For God so loved the world");
+                    setMatchedVerse(fallback);
+                  }
                   setShowResults(!showResults);
                   setIsAnalyzing(false);
                 }}
@@ -63,7 +92,7 @@ export default function Home() {
               </div>
             )}
             
-            {showResults && !isAnalyzing && <VerseResults />}
+            {showResults && !isAnalyzing && <VerseResults matchedVerse={matchedVerse} />}
           </div>
         </div>
       </section>
