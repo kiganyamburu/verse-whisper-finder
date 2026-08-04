@@ -1,5 +1,6 @@
 import { Book, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 const Header = () => {
   return (
@@ -15,18 +16,21 @@ const Header = () => {
           </div>
         </div>
         
-        <nav className="hidden md:flex items-center gap-4">
-          <Button variant="ghost" size="sm">
-            How it Works
-          </Button>
-          <Button variant="ghost" size="sm">
-            History
-          </Button>
-          <Button variant="outline" size="sm">
-            <Search className="h-4 w-4 mr-2" />
-            Browse Verses
-          </Button>
-        </nav>
+        <div className="flex items-center gap-2">
+          <nav className="hidden md:flex items-center gap-4 mr-2">
+            <Button variant="ghost" size="sm">
+              How it Works
+            </Button>
+            <Button variant="ghost" size="sm">
+              History
+            </Button>
+            <Button variant="outline" size="sm">
+              <Search className="h-4 w-4 mr-2" />
+              Browse Verses
+            </Button>
+          </nav>
+          <ThemeToggle />
+        </div>
       </div>
     </header>
   );
