@@ -6,11 +6,15 @@ import HeroSection from '@/components/HeroSection';
 import AudioRecorder from '@/components/AudioRecorder';
 import VerseResults from '@/components/VerseResults';
 import { matchVerse, MatchResult } from '@/lib/matcher';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Search } from 'lucide-react';
 
 export default function Home() {
   const [showResults, setShowResults] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [matchedVerse, setMatchedVerse] = useState<MatchResult | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const handleRecordingComplete = async (transcript: string, blob?: Blob) => {
     setIsAnalyzing(true);
@@ -68,6 +72,53 @@ export default function Home() {
           {/* Toggle between recorder and results for demo */}
           <div className="space-y-8">
             <AudioRecorder onRecordingComplete={handleRecordingComplete} />
+
+            {/* Fallback Text Search Input */}
+            <div className="flex flex-col items-center max-w-lg mx-auto w-full gap-3 pt-4 border-t border-border">
+              <p className="text-sm font-medium text-muted-foreground self-start">Alternative: Search by Typing</p>
+              <div className="flex items-center w-full gap-2">
+                <Input
+                  type="text"
+                  placeholder="Type a verse or keywords (e.g. shepherd, beginning, loved)..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && searchQuery.trim()) {
+                      handleRecordingComplete(searchQuery);
+                    }
+                  }}
+                  className="flex-1"
+                />
+                <Button 
+                  onClick={() => searchQuery.trim() && handleRecordingComplete(searchQuery)}
+                  className="bg-gradient-primary hover:shadow-glow"
+                >
+                  <Search className="h-4 w-4 mr-2" />
+                  Search
+                </Button>
+              </div>
+              
+              <div className="flex flex-wrap gap-2 justify-start w-full text-xs text-muted-foreground mt-1">
+                <span className="font-semibold">Quick tests:</span>
+                {[
+                  "the Lord is my shepherd",
+                  "In the beginning God created",
+                  "For God so loved the world",
+                  "lean not on your own understanding"
+                ].map((txt) => (
+                  <button
+                    key={txt}
+                    onClick={() => {
+                      setSearchQuery(txt);
+                      handleRecordingComplete(txt);
+                    }}
+                    className="underline hover:text-primary transition-colors text-left"
+                  >
+                    "{txt}"
+                  </button>
+                ))}
+              </div>
+            </div>
             
             <div className="text-center">
               <button
