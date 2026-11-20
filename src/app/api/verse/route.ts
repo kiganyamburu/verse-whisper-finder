@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
+export const dynamic = 'force-dynamic';
+
 const BOOK_NAME_TO_ID: Record<string, number> = {
   "genesis": 1, "exodus": 2, "leviticus": 3, "numbers": 4, "deuteronomy": 5,
   "joshua": 6, "judges": 7, "ruth": 8, "1 samuel": 9, "2 samuel": 10,

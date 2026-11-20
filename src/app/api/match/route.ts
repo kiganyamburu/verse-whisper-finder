@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { matchVerses, scoreVerse, cleanWords, MatchResult } from "@/lib/matcher";
 
+export const dynamic = 'force-dynamic';
+
 const BIBLE_BOOKS: Record<number, string> = {
   1: "Genesis", 2: "Exodus", 3: "Leviticus", 4: "Numbers", 5: "Deuteronomy",
   6: "Joshua", 7: "Judges", 8: "Ruth", 9: "1 Samuel", 10: "2 Samuel",
