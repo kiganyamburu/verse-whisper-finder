@@ -1,30 +1,53 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import Header from '@/components/Header';
 import HeroSection from '@/components/HeroSection';
 import AudioRecorder from '@/components/AudioRecorder';
 import VerseResults from '@/components/VerseResults';
-import { matchVerse, MatchResult } from '@/lib/matcher';
+import { HistoryDrawer } from '@/components/HistoryDrawer';
+import { matchVerse, matchVerses, MatchResult } from '@/lib/matcher';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Search } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 
 export default function Home() {
   const [showResults, setShowResults] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [matchedVerse, setMatchedVerse] = useState<MatchResult | null>(null);
+  const [matchedVerses, setMatchedVerses] = useState<MatchResult[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const { toast } = useToast();
 
   const handleRecordingComplete = async (transcript: string, blob?: Blob) => {
+    // If both transcript and audio blob are empty
+    if (!transcript.trim() && !blob) {
+      toast({
+        title: "No Input Received",
+        description: "Please record audio, upload a file, or type a scripture in the search bar.",
+      });
+      return;
+    }
+
     setIsAnalyzing(true);
     setShowResults(false);
-    
+
     try {
       const formData = new FormData();
       formData.append("transcript", transcript);
+
       if (blob) {
-        formData.append("audio", blob, "recording.wav");
+        let extension = 'webm';
+        if (blob.type.includes('ogg')) extension = 'ogg';
+        else if (blob.type.includes('mp4') || blob.type.includes('aac')) extension = 'mp4';
+        else if (blob.type.includes('wav')) extension = 'wav';
+        else if (blob.type.includes('mp3') || blob.type.includes('mpeg')) extension = 'mp3';
+
+        formData.append("audio", blob, `recording.${extension}`);
       }
 
       const response = await fetch("/api/match", {
@@ -32,33 +55,92 @@ export default function Home() {
         body: formData,
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        setMatchedVerse(data.match);
+      const data = await response.json().catch(() => null);
+
+      if (response.ok && data?.success) {
+        const candidates: MatchResult[] = Array.isArray(data.matches) && data.matches.length > 0
+          ? data.matches
+          : (data.match ? [data.match] : []);
+
+        setMatchedVerses(candidates);
+        setMatchedVerse(candidates[0] || null);
+
+        if (data.transcript) {
+          setSearchQuery(data.transcript);
+        }
+        setShowResults(true);
+      } else if (data?.noTranscript) {
+        toast({
+          title: "Transcription Needed",
+          description: data.error || "Please type what was said in the audio.",
+          variant: "destructive",
+        });
+        searchInputRef.current?.focus();
+        setShowResults(false);
       } else {
-        console.warn("API response failed, falling back to local matching");
-        const match = matchVerse(transcript);
-        setMatchedVerse(match);
+        // Fall back to local database matching if we have a transcript
+        if (transcript.trim()) {
+          const matches = matchVerses(transcript, 5);
+          setMatchedVerses(matches);
+          setMatchedVerse(matches[0]);
+          setShowResults(true);
+        } else {
+          toast({
+            title: "Could not identify scripture",
+            description: "No spoken words were recognized. Please type the verse in the search bar below.",
+            variant: "destructive",
+          });
+          searchInputRef.current?.focus();
+          setShowResults(false);
+        }
       }
     } catch (err) {
       console.error("Failed to connect to API, falling back to local matching:", err);
-      const match = matchVerse(transcript);
-      setMatchedVerse(match);
+      if (transcript.trim()) {
+        const matches = matchVerses(transcript, 5);
+        setMatchedVerses(matches);
+        setMatchedVerse(matches[0]);
+        setShowResults(true);
+      } else {
+        toast({
+          title: "Connection Error",
+          description: "Could not reach the scripture matching service. Please try typing your verse.",
+          variant: "destructive",
+        });
+        setShowResults(false);
+      }
     } finally {
       setIsAnalyzing(false);
-      setShowResults(true);
     }
+  };
+
+  const handleSelectHistoricalVerse = (verse: MatchResult) => {
+    setMatchedVerse(verse);
+    setMatchedVerses([verse]);
+    setShowResults(true);
+    setTimeout(() => {
+      document.getElementById('results-view')?.scrollIntoView({ behavior: 'smooth' });
+    }, 150);
   };
 
   return (
     <div className="min-h-screen bg-background">
-      <Header />
+      <Header
+        onOpenHistory={() => setIsHistoryOpen(true)}
+        onBrowseVerses={() => {
+          document.getElementById('main-app')?.scrollIntoView({ behavior: 'smooth' });
+          searchInputRef.current?.focus();
+        }}
+        onHowItWorks={() => {
+          document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' });
+        }}
+      />
       
       {/* Hero Section */}
       <HeroSection />
       
       {/* Main App Section */}
-      <section className="py-20 px-4">
+      <section id="main-app" className="py-20 px-4 scroll-mt-14">
         <div className="container mx-auto max-w-4xl">
           <div className="text-center mb-12">
             <h2 className="text-3xl md:text-4xl font-bold mb-4">
@@ -69,7 +151,6 @@ export default function Home() {
             </p>
           </div>
           
-          {/* Toggle between recorder and results for demo */}
           <div className="space-y-8">
             <AudioRecorder onRecordingComplete={handleRecordingComplete} />
 
@@ -78,6 +159,7 @@ export default function Home() {
               <p className="text-sm font-medium text-muted-foreground self-start">Alternative: Search by Typing</p>
               <div className="flex items-center w-full gap-2">
                 <Input
+                  ref={searchInputRef}
                   type="text"
                   placeholder="Type a verse or keywords (e.g. shepherd, beginning, loved)..."
                   value={searchQuery}
@@ -124,8 +206,9 @@ export default function Home() {
               <button
                 onClick={() => {
                   if (!showResults) {
-                    const fallback = matchVerse("For God so loved the world");
-                    setMatchedVerse(fallback);
+                    const fallback = matchVerses("For God so loved the world", 3);
+                    setMatchedVerses(fallback);
+                    setMatchedVerse(fallback[0]);
                   }
                   setShowResults(!showResults);
                   setIsAnalyzing(false);
@@ -143,13 +226,21 @@ export default function Home() {
               </div>
             )}
             
-            {showResults && !isAnalyzing && <VerseResults matchedVerse={matchedVerse} />}
+            <div id="results-view" className="scroll-mt-20">
+              {showResults && !isAnalyzing && (
+                <VerseResults
+                  matchedVerse={matchedVerse}
+                  matches={matchedVerses}
+                  onSelectMatch={(v) => setMatchedVerse(v)}
+                />
+              )}
+            </div>
           </div>
         </div>
       </section>
 
       {/* How It Works Section */}
-      <section className="py-20 bg-muted/30">
+      <section id="how-it-works" className="py-20 bg-muted/30 scroll-mt-14">
         <div className="container mx-auto max-w-6xl px-4">
           <div className="text-center mb-16">
             <h2 className="text-3xl md:text-4xl font-bold mb-4">
@@ -170,7 +261,7 @@ export default function Home() {
               {
                 step: '2', 
                 title: 'AI Recognition',
-                description: 'Our advanced AI converts speech to text and matches it with our Bible database'
+                description: 'Our advanced algorithm converts speech to text and matches it with our Bible database'
               },
               {
                 step: '3',
@@ -189,6 +280,13 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      {/* History and Favorites Drawer */}
+      <HistoryDrawer
+        open={isHistoryOpen}
+        onOpenChange={setIsHistoryOpen}
+        onSelectVerse={handleSelectHistoricalVerse}
+      />
 
       {/* Footer */}
       <footer className="py-12 border-t border-border">

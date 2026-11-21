@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { matchVerse } from "@/lib/matcher";
+import { matchVerses, scoreVerse, cleanWords, MatchResult } from "@/lib/matcher";
 
 const BIBLE_BOOKS: Record<number, string> = {
   1: "Genesis", 2: "Exodus", 3: "Leviticus", 4: "Numbers", 5: "Deuteronomy",
@@ -22,15 +22,19 @@ export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
     const audioFile = formData.get("audio") as File | null;
-    const browserTranscript = formData.get("transcript") as string || "";
+    const browserTranscript = (formData.get("transcript") as string) || "";
 
-    let transcript = browserTranscript;
+    let transcript = browserTranscript.trim();
 
     // Check if OpenAI API Key is configured in environment variables
     const openAiKey = process.env.OPENAI_API_KEY;
     if (openAiKey && audioFile && audioFile.size > 0) {
       const openAiFormData = new FormData();
-      openAiFormData.append("file", audioFile);
+      const fileName = audioFile.name && audioFile.name.includes(".") 
+        ? audioFile.name 
+        : "audio.webm";
+
+      openAiFormData.append("file", audioFile, fileName);
       openAiFormData.append("model", "whisper-1");
 
       try {
@@ -44,56 +48,118 @@ export async function POST(request: NextRequest) {
 
         if (openAiResponse.ok) {
           const data = await openAiResponse.json();
-          transcript = data.text || transcript;
+          if (data.text && data.text.trim().length > 0) {
+            transcript = data.text.trim();
+          }
         } else {
-          console.error("OpenAI Whisper API failed with status:", openAiResponse.status);
+          const errText = await openAiResponse.text();
+          console.error("OpenAI Whisper API responded with error:", openAiResponse.status, errText);
         }
       } catch (err) {
         console.error("Failed to connect to OpenAI Whisper API:", err);
       }
     }
 
-    let matched = null;
+    if (!transcript) {
+      return NextResponse.json(
+        {
+          success: false,
+          noTranscript: true,
+          error: openAiKey
+            ? "No spoken words could be recognized in the audio clip. Please try speaking closer to the microphone or type the verse directly."
+            : "No speech transcript received. To automatically transcribe audio files or browsers without Web Speech support, configure OPENAI_API_KEY on the server, or type your verse below.",
+        },
+        { status: 422 }
+      );
+    }
 
-    // Try to search the complete Bible via free public Bolls.life API
-    if (transcript.trim().length > 0) {
+    // Clean query words for search
+    const sanitizedQuery = transcript
+      .replace(/[^\w\s']/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    const queryWords = cleanWords(sanitizedQuery);
+    const candidateMatches: MatchResult[] = [];
+    const seenRefs = new Set<string>();
+
+    // 1. Search online scripture database via Bolls.life API
+    if (sanitizedQuery.length > 0) {
       try {
-        const url = `https://bolls.life/find/KJV/?search=${encodeURIComponent(transcript)}`;
-        const apiResponse = await fetch(url);
-        if (apiResponse.ok) {
-          const data = await apiResponse.json();
-          if (Array.isArray(data) && data.length > 0) {
-            const topMatch = data[0];
-            const bookName = BIBLE_BOOKS[topMatch.book] || "Unknown";
-            const cleanText = topMatch.text
+        let apiUrl = `https://bolls.life/find/KJV/?search=${encodeURIComponent(sanitizedQuery)}`;
+        let apiResponse = await fetch(apiUrl);
+        let apiData = apiResponse.ok ? await apiResponse.json() : null;
+
+        // Fallback: If exact query returns no results, try searching with the longest key words
+        if ((!apiData || !Array.isArray(apiData) || apiData.length === 0) && queryWords.length >= 2) {
+          const keyWords = [...queryWords]
+            .filter(w => w.length >= 4)
+            .sort((a, b) => b.length - a.length)
+            .slice(0, 3)
+            .join(" ");
+
+          if (keyWords.length > 0) {
+            const fallbackUrl = `https://bolls.life/find/KJV/?search=${encodeURIComponent(keyWords)}`;
+            const fallbackRes = await fetch(fallbackUrl);
+            if (fallbackRes.ok) {
+              apiData = await fallbackRes.json();
+            }
+          }
+        }
+
+        if (Array.isArray(apiData) && apiData.length > 0) {
+          // Score and rank candidates from API
+          for (const item of apiData.slice(0, 15)) {
+            const bookName = BIBLE_BOOKS[item.book] || "Unknown";
+            const ref = `${bookName} ${item.chapter}:${item.verse}`;
+            if (seenRefs.has(ref)) continue;
+            seenRefs.add(ref);
+
+            const cleanText = (item.text || "")
               .replace(/<S>\d+<\/S>/g, "")
+              .replace(/<sup>.*?<\/sup>/gi, "")
               .replace(/<[^>]+>/g, "")
+              .replace(/\s+/g, " ")
               .trim();
 
-            matched = {
-              reference: `${bookName} ${topMatch.chapter}:${topMatch.verse}`,
+            const score = scoreVerse(queryWords, cleanText);
+
+            candidateMatches.push({
+              reference: ref,
               text: cleanText,
-              chapter: `${bookName} ${topMatch.chapter}`,
-              context: `Identified using full-text semantic indexing for "${transcript.slice(0, 50)}..."`,
+              chapter: `${bookName} ${item.chapter}`,
+              context: `Identified using full-text scripture indexing for "${transcript.slice(0, 40)}${transcript.length > 40 ? '...' : ''}"`,
               theme: "Scripture Database Match",
-              confidence: 100, // High confidence for exact match
-            };
+              confidence: Math.max(score, 60), // Baseline confidence for verified API hit
+            });
           }
         }
       } catch (apiErr) {
-        console.error("Failed to fetch match from bolls.life, using local database fallback:", apiErr);
+        console.error("Online scripture search failed, relying on local index:", apiErr);
       }
     }
 
-    // Fall back to local search database if online query yielded no results
-    if (!matched) {
-      matched = matchVerse(transcript);
+    // 2. Also run local fuzzy search
+    const localMatches = matchVerses(sanitizedQuery, 5);
+    for (const local of localMatches) {
+      if (!seenRefs.has(local.reference)) {
+        seenRefs.add(local.reference);
+        candidateMatches.push(local);
+      }
     }
+
+    // 3. Sort all ranked candidate matches descending by confidence
+    candidateMatches.sort((a, b) => b.confidence - a.confidence);
+
+    // Limit to top 5 candidates
+    const topCandidates = candidateMatches.slice(0, 5);
+    const topMatch = topCandidates[0] || localMatches[0];
 
     return NextResponse.json({
       success: true,
       transcript,
-      match: matched,
+      matches: topCandidates,
+      match: topMatch,
     });
   } catch (error: any) {
     console.error("Error matching verse in API route:", error);

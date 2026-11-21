@@ -1,8 +1,17 @@
+'use client';
+
 import { ArrowDown, Play } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import heroImage from '@/assets/hero-image.jpg';
 
 const HeroSection = () => {
+  const scrollTo = (id: string) => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
   return (
     <section className="relative min-h-screen flex items-center justify-center bg-gradient-hero overflow-hidden">
       {/* Hero Image Background */}
@@ -40,7 +49,7 @@ const HeroSection = () => {
               'Context & Commentary',
               'Save & Share'
             ].map((feature) => (
-              <div key={feature} className="bg-card/80 backdrop-blur-sm px-4 py-2 rounded-full border border-border">
+              <div key={feature} className="bg-card/80 backdrop-blur-sm px-4 py-2 rounded-full border border-border shadow-sm">
                 {feature}
               </div>
             ))}
@@ -48,13 +57,22 @@ const HeroSection = () => {
 
           {/* CTA Buttons */}
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-            <Button size="lg" className="bg-gradient-primary hover:shadow-glow text-lg px-8 py-6">
+            <Button 
+              size="lg" 
+              onClick={() => scrollTo('main-app')}
+              className="bg-gradient-primary hover:shadow-glow text-lg px-8 py-6"
+            >
               Start Recording
               <ArrowDown className="ml-2 h-5 w-5" />
             </Button>
-            <Button variant="outline" size="lg" className="text-lg px-8 py-6">
+            <Button 
+              variant="outline" 
+              size="lg" 
+              onClick={() => scrollTo('how-it-works')}
+              className="text-lg px-8 py-6"
+            >
               <Play className="mr-2 h-5 w-5" />
-              Watch Demo
+              How It Works
             </Button>
           </div>
 
