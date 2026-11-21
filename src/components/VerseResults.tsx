@@ -200,8 +200,20 @@ const VerseResults = ({ matchedVerse, matches = [], onSelectMatch }: VerseResult
   };
 
   const handleCopy = async () => {
+    const textToCopy = `"${currentDisplayText}" — ${activeVerse.reference} (${translation})`;
     try {
-      await navigator.clipboard.writeText(`"${currentDisplayText}" — ${activeVerse.reference} (${translation})`);
+      if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(textToCopy);
+      } else {
+        const textarea = document.createElement("textarea");
+        textarea.value = textToCopy;
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textarea);
+      }
       setCopied(true);
       toast.success("Verse copied to clipboard!");
       setTimeout(() => setCopied(false), 2000);

@@ -10,14 +10,42 @@ export function ServiceWorkerRegister() {
   const [isInstallable, setIsInstallable] = useState(false);
 
   useEffect(() => {
-    // 1. Register Service Worker
-    if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+    if (typeof window === 'undefined') return;
+
+    const isLocalhost = Boolean(
+      window.location.hostname === 'localhost' ||
+      window.location.hostname === '127.0.0.1' ||
+      window.location.hostname === '[::1]'
+    );
+
+    // In local development, actively unregister any existing service workers and clear caches
+    // to prevent Next.js chunk loading timeouts and stale HMR chunk conflicts
+    if (isLocalhost) {
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then((registrations) => {
+          for (const reg of registrations) {
+            reg.unregister();
+          }
+        });
+      }
+      if ('caches' in window) {
+        caches.keys().then((keys) => {
+          for (const key of keys) {
+            caches.delete(key);
+          }
+        });
+      }
+      return;
+    }
+
+    // In production, register the service worker
+    if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw.js').catch((err) => {
         console.warn('Service Worker registration notice:', err);
       });
     }
 
-    // 2. Capture PWA install prompt
+    // Capture PWA install prompt
     const handleBeforeInstall = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e);
@@ -61,4 +89,3 @@ export function ServiceWorkerRegister() {
     </div>
   );
 }
-
