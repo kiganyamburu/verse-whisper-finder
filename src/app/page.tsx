@@ -71,9 +71,8 @@ export default function Home() {
         setShowResults(true);
       } else if (data?.noTranscript) {
         toast({
-          title: "Transcription Needed",
-          description: data.error || "Please type what was said in the audio.",
-          variant: "destructive",
+          title: "Speech Not Transcribed",
+          description: "No words were recognized in this recording. You can type the scripture in the search bar below, or add OPENAI_API_KEY to your Vercel settings for automatic server-side audio transcription.",
         });
         searchInputRef.current?.focus();
         setShowResults(false);

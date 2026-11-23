@@ -144,38 +144,17 @@ const AudioRecorder = ({ onRecordingComplete }: AudioRecorderProps) => {
         (navigator.maxTouchPoints && navigator.maxTouchPoints > 2)
       );
 
-      // 1. Acquire microphone stream (Directly during user gesture for iOS/Safari compliance)
-      let stream: MediaStream | null = null;
-      if (navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function') {
-        try {
-          stream = await navigator.mediaDevices.getUserMedia({
-            audio: {
-              echoCancellation: true,
-              noiseSuppression: true,
-              autoGainControl: true,
-            },
-          });
-        } catch (constraintErr) {
-          console.warn("Advanced audio constraints rejected, falling back to basic audio:", constraintErr);
-          try {
-            stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          } catch (basicErr) {
-            console.warn("Basic getUserMedia failed or denied:", basicErr);
-          }
-        }
-      }
+      // 1. START SPEECH RECOGNITION SYNCHRONOUSLY (Directly in the user gesture event loop!)
+      const SpeechRecognition = typeof window !== 'undefined' && 
+        ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
 
-      mediaStreamRef.current = stream;
-
-      // 2. Setup Speech Recognition if available (independent try-catch so it never breaks recording)
-      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
       if (SpeechRecognition) {
         try {
           const rec = new SpeechRecognition();
           // Mobile Safari and Android are much more reliable with continuous=false
           rec.continuous = !isMobile;
           rec.interimResults = true;
-          rec.lang = 'en-US';
+          rec.lang = typeof navigator !== 'undefined' ? (navigator.language || 'en-US') : 'en-US';
 
           rec.onresult = (event: any) => {
             let interim = '';
@@ -215,9 +194,32 @@ const AudioRecorder = ({ onRecordingComplete }: AudioRecorderProps) => {
           rec.start();
           recognitionRef.current = rec;
         } catch (recErr) {
-          console.warn("Speech recognition could not be started concurrently:", recErr);
+          console.warn("Synchronous speech recognition notice:", recErr);
         }
       }
+
+      // 2. ACQUIRE MICROPHONE STREAM FOR AUDIO RECORDING
+      let stream: MediaStream | null = null;
+      if (navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function') {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true,
+            },
+          });
+        } catch (constraintErr) {
+          console.warn("Advanced audio constraints rejected, falling back to basic audio:", constraintErr);
+          try {
+            stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          } catch (basicErr) {
+            console.warn("Basic getUserMedia failed or denied:", basicErr);
+          }
+        }
+      }
+
+      mediaStreamRef.current = stream;
 
       // If both getUserMedia and SpeechRecognition are unavailable, notify the user clearly
       if (!stream && !recognitionRef.current) {
